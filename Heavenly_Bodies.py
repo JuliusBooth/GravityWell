@@ -196,7 +196,7 @@ class SpaceShip(Heavenly_Body):
         self.blackhole = blackhole
         self.get_velocity()
         self.identity = "Spaceship"
-        self.image = pygame.image.load("/Users/juliusbooth/PycharmProjects/Gravity/Spaceship.bmp").convert()
+        self.image = pygame.image.load("Gravity/Spaceship.bmp").convert()
         self.image = pygame.transform.scale(self.image, (self.radius*2, self.radius*2))
         self.image.set_colorkey((0,0,0))
         self.rotation()
