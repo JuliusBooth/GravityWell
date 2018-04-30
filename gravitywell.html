@@ -32,18 +32,23 @@ var status;
 var gamePaused = false, musicPlaying = true;
 var myMusic;
 var musicVolume = 0.4;
-var spawnRate = 986;
+const SPAWNRATE = 986;
+var spawnRate = SPAWNRATE;
 var spawnIncreaseRate = 4;
-var canvasWidth = window.innerWidth*2/3;
-var canvasHeight = window.innerHeight*3/4;
+const canvasWidth = window.innerWidth*3/4;
+const canvasHeight = Math.min(window.innerHeight*3/4,canvasWidth);
 var sizeAdjustment = canvasWidth/800
 
 //const canvasWidth = 800, canvasHeight = 600;
-const G_factor = 20;
-const spaceshipSpeed = 2*sizeAdjustment;
-const spawnDistance = 100;
+
+const G_FACTOR = 20
+var G_factor = G_FACTOR;
+const SPACESHIPSPEED = 2*sizeAdjustment;
+var spaceshipSpeed = SPACESHIPSPEED;
+const spawnDistance = canvasHeight/3;
 const score_location_x = canvasWidth - 150;
 const spaceshipSize = 17;
+
 
 function displayHighscore() {
   var highscore = Number(localStorage.getItem("highscore"));
@@ -70,10 +75,10 @@ function getRandomColor() {
 }
 
 function startGame() {
-
+    start_location = Math.random() * (canvasWidth/2.5 - (canvasWidth-canvasHeight)/2) + (canvasWidth-canvasHeight)/2;
     myMusic = new Audio("marcburt.mp3");
     blackHole = new component(40,"black", canvasWidth/2,canvasHeight/2,100);
-    myGamePiece = new component(spaceshipSize, "Spaceship.bmp", Math.random()*canvasWidth/4+50, canvasHeight/2, 30, "image");
+    myGamePiece = new component(spaceshipSize, "Spaceship.bmp", start_location, canvasHeight/2, 30, "image");
     myBackground = new background("space.jpg");
     myScore = new textBox("30px","Arial","white",score_location_x,50);
 
@@ -91,6 +96,7 @@ var myGameArea = {
         this.canvas.width = canvasWidth;
         this.canvas.height = canvasHeight;
         this.frameNo = 0;
+        this.frameCount = 0;
         this.lastFrameCall = 0;
         this.context = this.canvas.getContext("2d");
         document.body.insertBefore(this.canvas, document.body.childNodes[4]);
@@ -108,14 +114,16 @@ var myGameArea = {
               myGameArea.resume();
               gamePaused = false;
             }}
+
             if (e.keyCode === 32) { //spacebar
               myGameArea.stop();
               spaceRocks=[];
               gamePaused = false;
               myMusic.currentTime = 0;
-              spawnRate = 980;
+              spawnRate = SPAWNRATE;
+              new_start_location = Math.random() * (canvasWidth/2.5 - (canvasWidth-canvasHeight)/2) + (canvasWidth-canvasHeight)/2;
               blackHole = new component(40,"black", canvasWidth/2,canvasHeight/2,100);
-              myGamePiece = new component(spaceshipSize, "Spaceship.bmp", Math.random()*canvasWidth/4+50, canvasHeight/2, 30, "image");
+              myGamePiece = new component(spaceshipSize, "Spaceship.bmp", new_start_location, canvasHeight/2, 30, "image");
               myScore = new textBox("30px","Arial","white",score_location_x,50);
               myGameArea.resume();
             }
@@ -140,7 +148,19 @@ var myGameArea = {
     resume : function(){
       myMusic.play()
       this.interval = setInterval(updateGameArea,20);
-    }}
+    },
+    time_warp : function(){
+      if (this.frameCount === 0){
+      this.frameCount = 50;
+      G_factor = 1;
+      spaceshipSpeed = 1;
+    }},
+    de_warp : function(){
+      this.frameCount =0;
+      G_factor = G_FACTOR;
+      spaceshipSpeed = SPACESHIPSPEED;
+    }
+  }
 
 function textBox(size,style,color,x,y){
   this.size = size;
@@ -210,46 +230,65 @@ function component(radius, color, x, y, mass,type) {
       this.ddY = 0;
     }
     this.crashWith = function(otherobj) {
-    var X_dist = otherobj.x - this.x;
-    var Y_dist =   otherobj.y - this.y;
     var leeway = 3;
-    var distance = Math.sqrt(X_dist*X_dist + Y_dist*Y_dist);
-    var crash = false;
-    if (distance <= (otherobj.radius + this.radius - leeway))  {
-       crash = true;
+    if (this.dist_apart(otherobj) <= (otherobj.radius + this.radius - leeway))  {
+       return(true);
     }
-    return crash;
+    return(false);
 }
+  this.collisionWith = function(otherobj){
+    var leeway = 10;
+    if (this.dist_apart(otherobj) <= (otherobj.radius + this.radius))  {
+       return(true);
+    }
+    return(false);
+  }
+  this.collisionResult = function(otherobj){
+    this.dX = (this.mass-otherobj.mass)/(this.mass+otherobj.mass)*this.dX + 2*otherobj.mass/(this.mass+otherobj.mass)*otherobj.dX;
+    this.dY = (this.mass-otherobj.mass)/(this.mass+otherobj.mass)*this.dY + 2*otherobj.mass/(this.mass+otherobj.mass)*otherobj.dY;
+  }
   this.updateAngle = function(){
     this.angle = this.angle_toCenter();
   }
-  this.gravity = function(){
-
+  this.blackhole_gravity = function(){
     var acceleration = G_factor*blackHole.mass/(this.dist_toCenter()*this.dist_toCenter());
-    this.ddX = Math.cos(this.angle_toCenter())*acceleration;
-    this.ddY = Math.sin(this.angle_toCenter())*acceleration;
+    this.ddX += Math.cos(this.angle_toCenter())*acceleration;
+    this.ddY += Math.sin(this.angle_toCenter())*acceleration;
   }
+  this.gravity_toBody = function(body){
+    var acceleration = G_factor*body.mass/(this.dist_apart(body)*this.dist_apart(body));
+    this.ddX += Math.cos(this.angle_toBody(body))*acceleration;
+    this.ddy += Math.sin(this.angle_toBody(body))*acceleration;
+  }
+
   this.updateVelocity = function(){
     var velocity = Math.sqrt(G_factor*blackHole.mass/this.dist_toCenter());
     this.dX = velocity * Math.sin(this.angle_toCenter());
     this.dY = -1*velocity * Math.cos(this.angle_toCenter());
   }
-  this.dist_apart = function(body){
-    x_dist_squared = (this.x-body.x)*(this.x-body.x)
-    y_dist_squared = (this.y-body.y)*(this.y-body.y)
-    return(Math.sqrt(x_dist_squared + y_dist_squared));
+  this.x_toBody = function(body){
+    return(body.x - this.x);
   }
   this.x_toCenter = function(){
-    return(X_dist = blackHole.x - this.x);
+    return(this.x_toBody(blackHole));
+  }
+  this.y_toBody = function(body){
+    return(body.y - this.y);
   }
   this.y_toCenter = function(){
-    return(Y_dist = blackHole.y - this.y);
+    return(this.y_toBody(blackHole));
+  }
+  this.dist_apart = function(body){
+    return(Math.sqrt(this.x_toBody(body)*this.x_toBody(body) + this.y_toBody(body)*this.y_toBody(body)));
   }
   this.dist_toCenter = function(){
     return(this.dist_apart(blackHole));
   }
+  this.angle_toBody = function(body){
+    return(Math.atan2(this.y_toBody(body), this.x_toBody(body)));
+  }
   this.angle_toCenter = function(){
-    return(Math.atan2(this.y_toCenter(), this.x_toCenter()))
+    return(this.angle_toBody(blackHole))
   }
   this.drawFlame = function(){
     ctx = myGameArea.context;
@@ -264,9 +303,6 @@ function component(radius, color, x, y, mass,type) {
     ctx.fill();
     ctx.restore();
   }
-
-
-
 }
 
 
@@ -278,11 +314,11 @@ function updateGameArea() {
       myGameArea.clear();
       myGameArea.frameNo += 1;
       myGamePiece.updateVelocity();
-      myGamePiece.gravity();
+      myGamePiece.blackhole_gravity();
       myGamePiece.updateAngle();
       myBackground.update();
       if (myGameArea.key && myGameArea.key == 38) {
-        if (myGamePiece.dist_toCenter() < canvasHeight/2-10){
+        if (myGamePiece.dist_toCenter() < Math.min(canvasHeight/2,canvasWidth/2)-10){
           myGamePiece.drawFlame();
           myGamePiece.angle -= Math.PI/8;
           myGamePiece.x -= myGamePiece.x_toCenter()/myGamePiece.dist_toCenter()*spaceshipSpeed;
@@ -293,28 +329,39 @@ function updateGameArea() {
         myGamePiece.x += myGamePiece.x_toCenter()/myGamePiece.dist_toCenter()*spaceshipSpeed;
         myGamePiece.y += myGamePiece.y_toCenter()/myGamePiece.dist_toCenter()*spaceshipSpeed;
       }
+      if (myGameArea.key && myGameArea.key == 84) { // t key
+        myGameArea.time_warp();
+      }
+
+      if (myGameArea.frameCount < 0){
+        myGameArea.de_warp();
+      } else{myGameArea.frameCount -=1;}
 
       myScore.update();
 
+      // Debris collision code
       for (i = 0; i < spaceRocks.length; i += 1){
-        if (myGamePiece.crashWith(spaceRocks[i])) {
+        rock_i = spaceRocks[i];
+        if (myGamePiece.crashWith(rock_i)) {
           myGameArea.stop();
-
-          spaceRocks[i].update();
+          rock_i.update();
         } else {
-            spaceRocks[i].gravity();
-            spaceRocks[i].update();
-            if (spaceRocks[i].crashWith(blackHole)){
-              blackHole.radius += spaceRocks[i].radius/10;
-              blackHole.mass += spaceRocks[i].mass/50;
+            rock_i.blackhole_gravity();
+            rock_i.update();
+            if (rock_i.crashWith(blackHole)){
+              blackHole.radius += Math.sqrt(rock_i.mass)/20;
+              blackHole.mass += rock_i.mass/50;
               spaceRocks.splice(i,1);
-          }}}
+              }
+          }}
 
+          // Debris spawn code
       if (Math.random()*1000 > spawnRate){
           new_x = Math.random()*canvasWidth
           new_y = Math.random()*canvasHeight
-          new_rock = new component(Math.floor(Math.random()*10+5),getRandomColor(),new_x,new_y,sizeAdjustment*(Math.random()*50+10));
-          if (myGamePiece.dist_apart(new_rock) > 200){
+          new_size = Math.floor(Math.random()*10+5)
+          new_rock = new component(new_size,getRandomColor(),new_x,new_y,sizeAdjustment*new_size*new_size/5);
+          if (myGamePiece.dist_apart(new_rock) > spawnDistance){
             new_rock.dX = Math.random()*10-5;
             new_rock.dY = Math.random()*10-5;
             spaceRocks.push(new_rock);
@@ -348,11 +395,12 @@ startGame()
 <h1>Gravity Well</h1>
 <h2>Avoid space debris and orbit the blackhole as many times as you can.</h2>
 <ul>
-  <li> up arrow to fly away from blackhole, decreasing orbital velocity</li>
-  <li> down arrow to fall into blackhole, increasing orbital velocity</li>
-  <li> p to pause and unpause </li>
-  <li> spacebar to restart </li>
-  <li> s to mute and unmute </li>
+  <li> up arrow to fly away from blackhole, decreasing orbital velocity.</li>
+  <li> down arrow to fall into blackhole, increasing orbital velocity.</li>
+  <li> t applies a local time dilation to the spaceship for one second.</li>
+  <li> p to pause and unpause.</li>
+  <li> spacebar to restart.</li>
+  <li> s to mute and unmute.</li>
 </ul>
 <h3>by Julius Booth</h3>
 
