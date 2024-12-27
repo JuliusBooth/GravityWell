@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <style>
+    .float-left-child {
+      float: left;
+    }
+    canvas {
+      border: 5px solid #d3d3d3;
+      background-color: #f1f1f1;
+    }
+  </style>
+</head>
+
+
+<body>
+
+  <h4>Instructions below.</h4>
+
+  <script>
+    var myGamePiece;
+    var blackHole;
+    var myBackground;
+    var spaceRocks = [];
+    var myScore;
+    var status;
+    var gamePaused = false, musicPlaying = true;
+    var myMusic;
+    var musicVolume = 0.4;
+    const SPAWNRATE = 986;
+    var spawnRate = SPAWNRATE;
+    var spawnIncreaseRate = 4;
+    const canvasWidth = window.innerWidth * 3 / 4;
+    const canvasHeight = Math.min(window.innerHeight * 3 / 4, canvasWidth);
+    var sizeAdjustment = canvasWidth / 800
+
+    const G_FACTOR = 20
+    var G_factor = G_FACTOR;
+    const SPACESHIPSPEED = 2 * sizeAdjustment;
+    var spaceshipSpeed = SPACESHIPSPEED;
+    const spawnDistance = canvasHeight / 3;
+    const score_location_x = canvasWidth - 150;
+    const spaceshipSize = 17;
+
+    function displayHighscore() {
+      var highscore = Number(localStorage.getItem("highscore"));
+
+      if (highscore === null) {
+        document.getElementById("highscore_display").innerHTML = 0;
+        localStorage.setItem("highscore", myGamePiece.revolutionNo);
+      }
+      else if (myGamePiece.revolutionNo > highscore) {
+        highscore = myGamePiece.revolutionNo;
+        document.getElementById("highscore_display").innerHTML = myGamePiece.revolutionNo;
+        localStorage.setItem("highscore", myGamePiece.revolutionNo);
+      } else {
+        document.getElementById("highscore_display").innerHTML = highscore;
+      }
+    }
+
+    function getRandomColor() {
+      var letters = '0123456789ABCDEF';
+      var color = '#';
+      for (var i = 0; i < 6; i++) {
+        color += letters[Math.floor(Math.random() * 16)];
+      }
+      return color;
+    }
+
+    function startGame() {
+      start_location = Math.random() * (canvasWidth / 2.5 - (canvasWidth - canvasHeight) / 2) + (canvasWidth - canvasHeight) / 2;
+      myMusic = new Audio("marcburt.mp3");
+      blackHole = new component(40, "black", canvasWidth / 2, canvasHeight / 2, 100);
+      myGamePiece = new component(spaceshipSize, "Spaceship.bmp", start_location, canvasHeight / 2, 30, "image");
+      myBackground = new background("space.jpg");
+      myScore = new textBox("30px", "Arial", "white", score_location_x, 50);
+
+      myMusic.volume = musicVolume;
+      myMusic.play();
+
+      myGameArea.start();
+    }
+
+    var myGameArea = {
+      canvas: document.createElement("canvas"),
+      start: function () {
+        this.canvas.width = canvasWidth;
+        this.canvas.height = canvasHeight;
+        this.frameNo = 0;
+        this.frameCount = 0;
+        this.lastFrameCall = 0;
+        this.context = this.canvas.getContext("2d");
+        document.body.insertBefore(this.canvas, document.body.childNodes[4]);
+        this.interval = setInterval(updateGameArea, 20);
+        window.addEventListener('keydown', function (e) {
+          myGameArea.key = e.keyCode;
+          if ([32, 38, 40].indexOf(e.keyCode) > -1) {
+            e.preventDefault(); //don't want screen to scroll up and down
+          }
+          if (e.keyCode === 80) { // p key
+            if (!gamePaused) {
+              myGameArea.stop();
+              gamePaused = true;
+            } else if (gamePaused) {
+              myGameArea.resume();
+              gamePaused = false;
+            }
+          }
+
+          if (e.keyCode === 32) { //spacebar
+            myGameArea.stop();
+            spaceRocks = [];
+            gamePaused = false;
+            myMusic.currentTime = 0;
+            spawnRate = SPAWNRATE;
+            new_start_location = Math.random() * (canvasWidth / 2.5 - (canvasWidth - canvasHeight) / 2) + (canvasWidth - canvasHeight) / 2;
+            blackHole = new component(40, "black", canvasWidth / 2, canvasHeight / 2, 100);
+            myGamePiece = new component(spaceshipSize, "Spaceship.bmp", new_start_location, canvasHeight / 2, 30, "image");
+            myScore = new textBox("30px", "Arial", "white", score_location_x, 50);
+            myGameArea.resume();
+          }
+          if (e.keyCode === 83) { // s key
+            if (myMusic.volume !== 0) {
+              myMusic.volume = 0;
+            } else if (myMusic.volume === 0) {
+              myMusic.volume = musicVolume;
+            }
+          }
+        })
+        window.addEventListener('keyup', function (e) {
+          myGameArea.key = false;
+        })
+      },
+      clear: function () {
+        this.context.clearRect(0, 0, this.canvas.width, this.canvas.height);
+      },
+      stop: function () {
+        myMusic.pause()
+        clearInterval(this.interval);
+      },
+      resume: function () {
+        myMusic.play()
+        this.interval = setInterval(updateGameArea, 20);
+      },
+      time_warp: function () {
+        if (this.frameCount === 0) {
+          this.frameCount = 50;
+          G_factor = 1;
+          spaceshipSpeed = 1;
+        }
+      },
+      de_warp: function () {
+        this.frameCount = 0;
+        G_factor = G_FACTOR;
+        spaceshipSpeed = SPACESHIPSPEED;
+      }
+    }
+
+    function textBox(size, style, color, x, y) {
+      this.size = size;
+      this.style = style;
+      this.x = x;
+      this.y = y;
+      this.color = color;
+      this.update = function () {
+        ctx = myGameArea.context;
+        ctx.font = this.size + " " + this.style;
+        ctx.fillStyle = color;
+        ctx.fillText(this.text, this.x, this.y);
+      }
+    }
+
+
+
+    function background(src) {
+      this.image = new Image();
+      this.image.src = src;
+      this.update = function () {
+        ctx = myGameArea.context;
+        ctx.drawImage(this.image, 0, 0, canvasWidth, canvasHeight);
+      }
+    }
+
+    function component(radius, color, x, y, mass, type) {
+      this.type = type;
+      if (this.type == "image") {
+        this.image = new Image();
+        this.image.src = color;
+      }
+      this.mass = mass;
+      this.radius = radius;
+      this.angle = 0;
+      this.previous_angle = 0;
+      this.x = x;
+      this.y = y;
+      this.revolutionNo = 0;
+      this.dX = 0;
+      this.dY = 0;
+      this.ddX = 0;
+      this.ddY = 0;
+      this.update = function () {
+        this.newPos()
+        ctx = myGameArea.context;
+        ctx.beginPath();
+        if (type == "image") {
+          ctx.save();
+          ctx.translate(this.x, this.y);
+          ctx.rotate(this.angle);
+          ctx.drawImage(this.image, -this.radius, -this.radius, this.radius * 2, this.radius * 2);
+          ctx.restore();
+        } else {
+          ctx.fillStyle = color;
+          ctx.arc(this.x, this.y, this.radius, 0, 2 * Math.PI, false);
+          ctx.fill();
+        }
+        ctx.closePath();
+      }
+      this.newPos = function () {
+        this.dX += this.ddX;
+        this.x += this.dX;
+        this.dY += this.ddY;
+        this.y += this.dY;
+        this.ddX = 0;
+        this.ddY = 0;
+      }
+      this.crashWith = function (otherobj) {
+        var leeway = 3;
+        if (this.dist_apart(otherobj) <= (otherobj.radius + this.radius - leeway)) {
+          return (true);
+        }
+        return (false);
+      }
+      this.collisionWith = function (otherobj) {
+        var leeway = 10;
+        if (this.dist_apart(otherobj) <= (otherobj.radius + this.radius)) {
+          return (true);
+        }
+        return (false);
+      }
+      this.collisionResult = function (otherobj) {
+        this.dX = (this.mass - otherobj.mass) / (this.mass + otherobj.mass) * this.dX + 2 * otherobj.mass / (this.mass + otherobj.mass) * otherobj.dX;
+        this.dY = (this.mass - otherobj.mass) / (this.mass + otherobj.mass) * this.dY + 2 * otherobj.mass / (this.mass + otherobj.mass) * otherobj.dY;
+      }
+      this.updateAngle = function () {
+        this.angle = this.angle_toCenter();
+      }
+      this.blackhole_gravity = function () {
+        var acceleration = G_factor * blackHole.mass / (this.dist_toCenter() * this.dist_toCenter());
+        this.ddX += Math.cos(this.angle_toCenter()) * acceleration;
+        this.ddY += Math.sin(this.angle_toCenter()) * acceleration;
+      }
+      this.gravity_toBody = function (body) {
+        var acceleration = G_factor * body.mass / (this.dist_apart(body) * this.dist_apart(body));
+        this.ddX += Math.cos(this.angle_toBody(body)) * acceleration;
+        this.ddy += Math.sin(this.angle_toBody(body)) * acceleration;
+      }
+
+      this.updateVelocity = function () {
+        var velocity = Math.sqrt(G_factor * blackHole.mass / this.dist_toCenter());
+        this.dX = velocity * Math.sin(this.angle_toCenter());
+        this.dY = -1 * velocity * Math.cos(this.angle_toCenter());
+      }
+      this.x_toBody = function (body) {
+        return (body.x - this.x);
+      }
+      this.x_toCenter = function () {
+        return (this.x_toBody(blackHole));
+      }
+      this.y_toBody = function (body) {
+        return (body.y - this.y);
+      }
+      this.y_toCenter = function () {
+        return (this.y_toBody(blackHole));
+      }
+      this.dist_apart = function (body) {
+        return (Math.sqrt(this.x_toBody(body) * this.x_toBody(body) + this.y_toBody(body) * this.y_toBody(body)));
+      }
+      this.dist_toCenter = function () {
+        return (this.dist_apart(blackHole));
+      }
+      this.angle_toBody = function (body) {
+        return (Math.atan2(this.y_toBody(body), this.x_toBody(body)));
+      }
+      this.angle_toCenter = function () {
+        return (this.angle_toBody(blackHole))
+      }
+      this.drawFlame = function () {
+        ctx = myGameArea.context;
+        ctx.fillStyle = "blue";
+        ctx.beginPath();
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        ctx.rotate(this.angle);
+        ctx.moveTo(this.radius, 2 * this.radius);
+        ctx.lineTo(12, this.radius);
+        ctx.lineTo(0, this.radius);
+        ctx.fill();
+        ctx.restore();
+      }
+      this.drawDecelerationFlame = function () {
+        ctx = myGameArea.context;
+        ctx.fillStyle = "red";
+        ctx.beginPath();
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        ctx.rotate(this.angle);
+        ctx.moveTo(-this.radius, 2 * this.radius);
+        ctx.lineTo(-12, this.radius);
+        ctx.lineTo(0, this.radius);
+        ctx.fill();
+        ctx.restore();
+      } 
+    }
+
+
+    function updateGameArea() {
+      
+      if (myGamePiece.crashWith(blackHole)) {
+        myGameArea.stop();
+      } else {
+        myGameArea.clear();
+        myGameArea.frameNo += 1;
+        myGamePiece.updateVelocity();
+        myGamePiece.blackhole_gravity();
+        myGamePiece.updateAngle();
+        myBackground.update();
+        if (myGameArea.key && myGameArea.key == 38) {
+          if (myGamePiece.dist_toCenter() < Math.min(canvasHeight / 2, canvasWidth / 2) - 10) {
+            myGamePiece.drawFlame();
+            myGamePiece.angle -= Math.PI / 8;
+            myGamePiece.x -= myGamePiece.x_toCenter() / myGamePiece.dist_toCenter() * spaceshipSpeed;
+            myGamePiece.y -= myGamePiece.y_toCenter() / myGamePiece.dist_toCenter() * spaceshipSpeed;
+          }
+        }
+        if (myGameArea.key && myGameArea.key == 40) {
+          myGamePiece.drawDecelerationFlame();
+          myGamePiece.angle += Math.PI / 8;
+          myGamePiece.x += myGamePiece.x_toCenter() / myGamePiece.dist_toCenter() * spaceshipSpeed;
+          myGamePiece.y += myGamePiece.y_toCenter() / myGamePiece.dist_toCenter() * spaceshipSpeed;
+        }
+        if (myGameArea.key && myGameArea.key == 84) { // t key
+          myGameArea.time_warp();
+        }
+
+        if (myGameArea.frameCount < 0) {
+          myGameArea.de_warp();
+        } else { myGameArea.frameCount -= 1; }
+
+        myScore.update();
+
+        // Debris collision code
+        for (i = 0; i < spaceRocks.length; i += 1) {
+          rock_i = spaceRocks[i];
+          if (myGamePiece.crashWith(rock_i)) {
+            myGameArea.stop();
+            rock_i.update();
+            this.gameOver = true;
+          } else {
+            rock_i.blackhole_gravity();
+            rock_i.update();
+            if (rock_i.crashWith(blackHole)) {
+              blackHole.radius += Math.sqrt(rock_i.mass) / 20;
+              blackHole.mass += rock_i.mass / 50;
+              spaceRocks.splice(i, 1);
+            }
+          }
+        }
+
+        // Debris spawn code
+        if (Math.random() * 1000 > spawnRate) {
+          new_x = Math.random() * canvasWidth
+          new_y = Math.random() * canvasHeight
+          new_size = Math.floor(Math.random() * 10 + 5)
+          png = Math.random() > 0.5 ? "asteroid.png" : "asteroid2.png";
+          new_rock = new component(new_size, png, new_x, new_y, sizeAdjustment * new_size * new_size / 5, "image");
+          if (myGamePiece.dist_apart(new_rock) > spawnDistance) {
+            new_rock.dX = Math.random() * 10 - 5;
+            new_rock.dY = Math.random() * 10 - 5;
+            spaceRocks.push(new_rock);
+          }
+        }
+
+
+        if (myGamePiece.angle >= 0 && myGamePiece.previous_angle < 0 && myGameArea.frameNo > myGameArea.lastFrameCall + 100) {
+          myGamePiece.revolutionNo += 1;
+          spawnRate -= spawnIncreaseRate;
+          myGameArea.lastFrameCall = myGameArea.frameNo;
+
+        }
+        displayHighscore();
+        myGamePiece.previous_angle = myGamePiece.angle;
+        myScore.text = "Score: " + myGamePiece.revolutionNo;
+        myScore.update();
+
+        myGamePiece.update();
+        blackHole.update();
+        myGameArea.frameNo += 1;
+        
+      }
+    }
+    startGame()
+  </script>
+  <div class='parent'>
+    <div class='child float-left-child'>Highscore:&nbsp;</div>
+    <div class='child float-left-child' id="highscore_display"></div>
+  </div>
+
+  <br>
+  <h1>Gravity Well</h1>
+  <h2>Avoid space debris and orbit the blackhole as many times as you can.</h2>
+  <ul>
+    <li> up arrow to fly away from blackhole, decreasing orbital velocity.</li>
+    <li> down arrow to fall into blackhole, increasing orbital velocity.</li>
+    <li> t applies a local time dilation to the spaceship for one second.</li>
+    <li> p to pause and unpause.</li>
+    <li> spacebar to restart.</li>
+    <li> s to mute and unmute.</li>
+  </ul>
+  <h3>by Julius Booth</h3>
+
+
+</body>
+
+</html>
