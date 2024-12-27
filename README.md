@@ -4,6 +4,10 @@ A spaceship is trapped in a gravity well. Survive for as long as possible and ma
 Avoid asteroids and the blackhole by using up and down keys. The closer the spaceship moves to the blackhole the faster it'll go.
 
 To play:
+https://gravitywell-d5c98.web.app/
+
+OR
+
 1. Clone this repo
 2. Open gravitywell.html in browser
 
